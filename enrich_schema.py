@@ -37,13 +37,16 @@ def load_vocabs(lovfile):
 def process_properties(properties, attr_mappings):
 
     for k, v in properties.items():
-        if "type" in v and "object" not in v["type"]:
+        if "type" in v and "object" not in v["type"] and "array" not in v["type"]:
+
+            # print("looking for attribute mapping for", k)
             attr_mapping = next((x for x in attr_mappings if x['Semantic Json Name'] == k), None)
             if attr_mapping:
 
                 if attr_mapping['Attribute Data Type'] == "Character":
                     # v.update({'type': 'string'})
-                    v.update({'maxLength': attr_mapping['Length']})
+                    # v.update({'maxLength': attr_mapping['Length']})
+                    pass
 
                 if attr_mapping['Attribute Data Type'] == "Number":
                     v.update({'format': 'number'})
@@ -51,8 +54,20 @@ def process_properties(properties, attr_mappings):
                 if attr_mapping['Attribute Data Type'] == "Date":
                     v.update({'format': 'date-time'})
 
+                print("{}: {}".format(k, attr_mapping['Length']))
+
+                if attr_mapping["Length"].strip() != "N/A":
+                    v.update({'maxLength': attr_mapping['Length']})
+
+            else:
+                print("could not find attr mapping for", k)
+
         elif "type" in v and "object" in v["type"]:
             process_properties(v["properties"], attr_mappings)
+        elif "type" in v and "array" in v["type"]:
+            item = v["items"]
+            if "properties" in item:
+                process_properties(item["properties"], attr_mappings)
 
 
 def run(args):

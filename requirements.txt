@@ -1,1 +1,3 @@
-genson
+#genson
+#pandas 0.22+
+openpyxl
