@@ -68,3 +68,6 @@ example:
 ```bash
 $ python3 json2shapes.py --prefix=MDM mdm-product.v2.schema.json mdm-product-data-model.xlsx
 ```
+
+## TODO
+- add controlled vocabularies (< 20 items) to JSON Schema during enrich_schema.py
