@@ -4,6 +4,13 @@
 
 Running these scripts requires python3+.  For information on installing Python, visit the [Python Beginners Guide](https://wiki.python.org/moin/BeginnersGuide/Download).
 
+The json2shape script depends on the the [pandas](https://pypi.org/project/pandas/) library for writing the workkbook to an excel file.
+
+Pandas can be installed with the following command
+```bash
+$ pip3 install -U pandas
+```
+
 ## Generating JSON Schema from example JSON
 
 Go to https://jsonschema.net/ to generate a basic JSON Schema from the example JSON document.
@@ -14,6 +21,7 @@ This script enriches the basic JSON Schema generated using https://jsonschema.ne
 
 The MDM attribute mapping tab should be exported as a CSV and is passed to the script using the ``--mapping`` parameter.
 
+usage:
 ```bash
 $ python3 enrich_schema.py --help
 usage: enrich_schema.py [-h] [--mapping MAPPING] [--lov LOV] infile outfile
@@ -32,4 +40,31 @@ optional arguments:
 example:
 ```bash
 $ python3 enrich_schema.py --mapping "MDM_Generic_Outbound_Attributes_V1.9.xlsx - Attribute Mapping.csv" mdm-product.schema.json mdm-product.v2.schema.json
+```
+
+## Generating Workbook from JSON Schema
+
+This script generates a konig workbook spreadsheet based on an input JSON Schema.
+
+usage:
+```bash
+$ python3 json2shapes.py --help
+usage: json2shapes.py [-h] [--base BASE] [--primary-key PRIMARY_KEY]
+                      [--prefix PREFIX]
+                      schema workbook
+
+positional arguments:
+  schema                base JSON schema
+  workbook              workbook with data shapes
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --base BASE
+  --primary-key PRIMARY_KEY
+  --prefix PREFIX
+```
+
+example:
+```bash
+$ python3 json2shapes.py --prefix=MDM mdm-product.v2.schema.json mdm-product-data-model.xlsx
 ```
