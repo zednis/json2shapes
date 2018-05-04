@@ -77,8 +77,10 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
 
         if ref_node:
 
+            fk_uri = "alias:{}_FK".format(convert(ref_node)) if "___" not in ref_node else "alias:{}__FK".format(convert(ref_node[ref_node.rfind("___")+3:]))
+
             df.append({'Shape Id': name_uri,
-                       'Property Id': "alias:"+convert(ref_node)+"_FK",
+                       'Property Id': fk_uri,
                        'Value Type': 'xsd:string',
                        'Stereotype': 'konig:foreignKey',
                        'Min Count': 1,
@@ -88,14 +90,15 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
         for k, v in properties.items():
 
             if "type" in v and (v["type"] == "object" or "object" in v["type"]):
-                prop = "{}_{}".format(parent_node, convert(k)) if parent_node else "{}".format(convert(k))
+                prop = "{}___{}".format(parent_node, convert(k)) if parent_node else "{}".format(convert(k))
                 process(df, name, v, parent_node=prop, prefix=prefix)
 
             elif "type" in v and (v["type"] == "array" or "array" in v["type"]):
-                process(df, convert(k), v["items"], ref_node=name, prefix=prefix)
+                child_name = "{}___{}".format(name, k)
+                process(df, child_name, v["items"], ref_node=name, prefix=prefix)
 
             else:
-                prop = "alias:{}_{}".format(parent_node, convert(k)) if parent_node else "alias:{}".format(convert(k))
+                prop = "alias:{}___{}".format(parent_node, convert(k)) if parent_node else "alias:{}".format(convert(k))
                 row = {'Shape Id': name_uri, 'Property Id': prop}
 
                 # determine 'Value Type'
