@@ -54,13 +54,8 @@ def process_properties(properties, attr_mappings):
                 if attr_mapping['Attribute Data Type'] == "Date":
                     v.update({'format': 'date-time'})
 
-                print("{}: {}".format(k, attr_mapping['Length']))
-
                 if attr_mapping["Length"].strip() != "N/A":
                     v.update({'maxLength': attr_mapping['Length']})
-
-            else:
-                print("could not find attr mapping for", k)
 
         elif "type" in v and "object" in v["type"]:
             process_properties(v["properties"], attr_mappings)
