@@ -51,7 +51,8 @@ def shapes_sheet(data):
         shape = row["Shape Id"]
         if shape not in shape_set:
             shape_set.add(shape)
-            shapes.append({'Shape Id': shape})
+            datasource = "awsAurora(awsTableName:{})".format(shape.replace("shape:", ""))
+            shapes.append({'Shape Id': shape, "Datasource": datasource})
 
     df = pandas.DataFrame().from_dict(shapes)
     return columns, df
@@ -63,7 +64,9 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
 
         properties = node["properties"]
 
-        name_uri = "shape:{}_{}".format(convert(prefix), convert(name)) if prefix else "shape:{}".format(convert(name))
+        name_components = name.split("___")
+        name2 = name if len(name_components) <= 2 else "___".join(name_components[-2:])
+        name_uri = "shape:{}_{}".format(convert(prefix), convert(name2)) if prefix else "shape:{}".format(convert(name2))
 
         # synthetic key
         if not parent_node:
