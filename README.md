@@ -49,24 +49,21 @@ This script generates a konig workbook spreadsheet based on an input JSON Schema
 usage:
 ```bash
 $ python3 json2shapes.py --help
-usage: json2shapes.py [-h] [--base BASE] [--primary-key PRIMARY_KEY]
-                      [--prefix PREFIX]
-                      schema workbook
+usage: json2shapes.py [-h] [--config CONFIG] schema workbook
 
 positional arguments:
-  schema                base JSON schema
-  workbook              workbook with data shapes
+  schema           base JSON schema
+  workbook         workbook with data shapes
 
 optional arguments:
-  -h, --help            show this help message and exit
-  --base BASE
-  --primary-key PRIMARY_KEY
-  --prefix PREFIX
+  -h, --help       show this help message and exit
+  --config CONFIG  path to INI config file
+
 ```
 
 example:
 ```bash
-$ python3 json2shapes.py --prefix=MDM mdm-product.v2.schema.json mdm-product-data-model.xlsx
+$ python3 json2shapes.py --config=mdm-product.ini mdm-product.schema.json mdm-product-workbook.xlsx
 ```
 
 ## TODO

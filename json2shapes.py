@@ -1,42 +1,49 @@
 import json
 import re
 import argparse
+import configparser
 import pandas
 
 
+config = configparser.ConfigParser()
+config.optionxform = str
+
+
+def apply_aliases(name):
+
+    if config['ALIASES']:
+        new_name = name
+        for k, v in config['ALIASES'].items():
+            new_name = new_name.replace(k, v)
+        return new_name
+    else:
+        return name
+
+
 def convert(name):
-    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    aliased_name = apply_aliases(name)
+    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', aliased_name)
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).upper()
+
+
+def get_json_path(id_str):
+    json_path = id_str.replace("/items/properties/", "[*].")
+    json_path = json_path.replace("/properties/", ".")
+    json_path = "$"+json_path
+    return json_path
 
 
 def ontology_sheet():
 
     columns = ['Ontology Name', 'Comment', 'Namespace URI', 'Prefix']
-
-    data = [
-        {'Ontology Name': 'XML Schema',
-         'Comment': 'The XML Schema vocabulary which provides terms for simple data types.',
-         'Namespace URI': 'http://www.w3.org/2001/XMLSchema#',
-         'Prefix': 'xsd'},
-        {'Ontology Name': 'Konig Core Ontology',
-         'Comment': 'A vocabulary for enriched semantic models that enable ontology-based engineering solutions.',
-         'Namespace URI': 'http://www.konig.io/ns/core/',
-         'Prefix': 'konig'},
-        {'Ontology Name': 'Pearson Data Shapes',
-         'Comment': 'The ontology for data shapes defined by Pearson',
-         'Namespace URI': 'https://schema.pearson.com/shapes/',
-         'Prefix': 'shape'},
-        {'Ontology Name': 'Alias Namespace',
-         'Comment': 'A namespace that contains alternative names for properties.',
-         'Namespace URI': 'http://example.com/ns/alias/',
-         'Prefix': 'alias'},
-        {'Ontology Name': 'SHACL Vocabulary',
-         'Comment': 'W3C Shapes Constraint Language (SHACL)',
-         'Namespace URI': 'http://www.w3.org/ns/shacl#',
-         'Prefix': 'sh'
-        }
-    ]
-
+    data = []
+    for ontology in [x for x in config if "Ontology" in x]:
+        data.append({
+            'Ontology Name': config[ontology]["name"],
+            'Comment': config[ontology]["description"],
+            'Namespace URI': config[ontology]["uri"],
+            'Prefix': ontology[9:]
+        })
     df = pandas.DataFrame().from_dict(data)
     return columns, df
 
@@ -102,7 +109,7 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
 
             else:
                 prop = "alias:{}___{}".format(parent_node, convert(k)) if parent_node else "alias:{}".format(convert(k))
-                row = {'Shape Id': name_uri, 'Property Id': prop}
+                row = {'Shape Id': name_uri, 'Property Id': prop, 'Remarks': get_json_path(v["$id"])}
 
                 # determine 'Value Type'
                 if "type" in v and (v["type"] == "string" or "string" in v["type"]):
@@ -137,9 +144,16 @@ def run(args):
 
     df = []
 
+    if args.config:
+        config.read(args.config)
+
+    prefix = config["GENERAL"].get("prefix", None)
+    base = config["GENERAL"].get("base", None)
+    primary_key = config["PRIMARY KEYS"].get(base, None)
+
     with open(args.schema) as json_schema:
         schema = json.load(json_schema)
-        process(df, args.base, schema, primary_key=args.primary_key, prefix=args.prefix)
+        process(df, base, schema, primary_key=primary_key, prefix=prefix)
 
     writer = pandas.ExcelWriter(args.workbook)
 
@@ -149,7 +163,7 @@ def run(args):
     shapes_columns, shapes_df = shapes_sheet(df)
     shapes_df.to_excel(writer, 'Shapes', columns=shapes_columns, index=False)
 
-    columns = ['Shape Id', 'Property Id', 'Value Type', 'Stereotype', 'Min Count', 'Max Count', 'Max Length']
+    columns = ['Shape Id', 'Property Id', 'Remarks', 'Value Type', 'Stereotype', 'Min Count', 'Max Count', 'Max Length']
     _df = pandas.DataFrame().from_dict(df)
     _df.to_excel(writer, 'Property Constraints', columns=columns, index=False)
 
@@ -158,12 +172,8 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-
-    parser.add_argument('--base', default="Product")
-    parser.add_argument('--primary-key', default="ppid")
-    parser.add_argument('--prefix')
+    parser.add_argument('--config', help='path to INI config file')
     parser.add_argument('schema', help='base JSON schema')
     parser.add_argument('workbook', help='workbook with data shapes')
-
     args = parser.parse_args()
     run(args)
