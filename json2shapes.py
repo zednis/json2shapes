@@ -58,7 +58,7 @@ def shapes_sheet(data):
         shape = row["Shape Id"]
         if shape not in shape_set:
             shape_set.add(shape)
-            datasource = "awsAurora(AwsTableName:\"{}\")".format(shape.replace("shape:", ""))
+            datasource = "AwsAurora(AwsTableName:\"{}\")".format(shape.replace("shape:", ""))
             shapes.append({'Shape Id': shape, "Datasource": datasource})
 
     df = pandas.DataFrame().from_dict(shapes)
