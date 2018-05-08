@@ -15,6 +15,12 @@ $ pip3 install -U pandas
 
 Go to https://jsonschema.net/ to generate a basic JSON Schema from the example JSON document.
 
+Recommended schema options:
+- Annotations - select only 'Infer Examples'
+- Common Assertions - select only 'INCL null as type'
+
+All other schema options can be left at default.
+
 ## Enriching The Schema
 
 This script enriches the basic JSON Schema generated using https://jsonschema.net/ with attribute information (datatype, format, string maxLength) gleaned from the MDM Attribute mappings spreadsheet.

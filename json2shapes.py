@@ -58,7 +58,7 @@ def shapes_sheet(data):
         shape = row["Shape Id"]
         if shape not in shape_set:
             shape_set.add(shape)
-            datasource = "awsAurora(awsTableName:{})".format(shape.replace("shape:", ""))
+            datasource = "awsAurora(AwsTableName:\"{}\")".format(shape.replace("shape:", ""))
             shapes.append({'Shape Id': shape, "Datasource": datasource})
 
     df = pandas.DataFrame().from_dict(shapes)
@@ -82,7 +82,8 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
                        'Value Type': 'xsd:string',
                        'Stereotype': 'konig:syntheticKey',
                        'Min Count': 1,
-                       'Max Count': 1
+                       'Max Count': 1,
+                       'Max Length': 150
                        })
 
         if ref_node:
@@ -94,7 +95,8 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
                        'Value Type': 'xsd:string',
                        'Stereotype': 'konig:foreignKey',
                        'Min Count': 1,
-                       'Max Count': 1
+                       'Max Count': 1,
+                       'Max Length': 150
                        })
 
         for k, v in properties.items():
@@ -118,7 +120,7 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
                     if "format" in v and (v["format"] == "number" or "number" in v["format"]):
                         row.update({'Value Type': "xsd:decimal"})
                     elif "format" in v and (v["format"] == "date-time" or "date-time" in v["format"]):
-                        row.update({'Value Type': "xsd:datetime"})
+                        row.update({'Value Type': "xsd:dateTime"})
                     else:
                         row.update({'Value Type': 'xsd:string'})
                 else:
@@ -126,6 +128,8 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
 
                 if "maxLength" in v and v["maxLength"] and v["maxLength"] != "N/A":
                     row.update({'Max Length': int(v["maxLength"])})
+                elif "type" in v and (v["type"] == "string" or "string" in v["type"]):
+                    row.update({'Max Length': 150})
 
                 if "type" in v and "null" in v["type"]:
                     row.update({'Min Count': 0})
