@@ -14,7 +14,7 @@ def apply_aliases(name):
     if config['ALIASES']:
         new_name = name
         for k, v in config['ALIASES'].items():
-            new_name = new_name.replace(k, v)
+            new_name = re.sub(k, v, new_name)
         return new_name
     else:
         return name
@@ -31,6 +31,20 @@ def get_json_path(id_str):
     json_path = json_path.replace("/properties/", ".")
     json_path = "$"+json_path
     return json_path
+
+
+def settings_sheet():
+    columns = ['Setting Name', 'Setting Value', 'Pattern', 'Replacement']
+    data = []
+    for setting in [x for x in config if "Setting" in x]:
+        data.append({
+            'Setting Name': setting[8:],
+            'Setting Value': config[setting]["value"],
+            'Pattern': config[setting]["pattern"] if "pattern" in config[setting] else None,
+            'Replacement': config[setting]["replacement"] if "replacement" in config[setting] else None
+        })
+    df = pandas.DataFrame().from_dict(data)
+    return columns, df
 
 
 def ontology_sheet():
@@ -71,8 +85,8 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
 
         properties = node["properties"]
 
-        name_components = name.split("___")
-        name2 = name if len(name_components) <= 2 else "___".join(name_components[-2:])
+        name_components = [convert(x) for x in name.split("__")]
+        name2 = name if len(name_components) <= 2 else "__".join(name_components[-2:])
         name_uri = "shape:{}_{}".format(convert(prefix), convert(name2)) if prefix else "shape:{}".format(convert(name2))
 
         # synthetic key
@@ -81,6 +95,7 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
                        'Property Id': 'alias:STAGE_ID',
                        'Value Type': 'xsd:string',
                        'Stereotype': 'konig:syntheticKey',
+                       'Remarks': None,
                        'Min Count': 1,
                        'Max Count': 1,
                        'Max Length': 150
@@ -88,29 +103,41 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
 
         if ref_node:
 
-            fk_uri = "alias:{}_FK".format(convert(ref_node)) if "___" not in ref_node else "alias:{}__FK".format(convert(ref_node[ref_node.rfind("___")+3:]))
+            # fk_uri = "alias:{}_FK".format(convert(ref_node)) if "__" not in ref_node else "alias:{}_FK".format(convert(ref_node[ref_node.rfind("__")+2:]))
+            fk_uri = "alias:{}_FK".format(convert(ref_node))
 
+            # add foreign key and array index (for preserving order)
             df.append({'Shape Id': name_uri,
                        'Property Id': fk_uri,
                        'Value Type': 'xsd:string',
                        'Stereotype': 'konig:foreignKey',
+                       'Remarks': 'references {}_{}.STAGE_ID'.format(prefix, convert(ref_node)),
                        'Min Count': 1,
                        'Max Count': 1,
                        'Max Length': 150
                        })
+            df.append({'Shape Id': name_uri,
+                       'Property Id': "alias:STAGE_INDEX",
+                       'Value Type': 'xsd:integer',
+                       'Stereotype': None,
+                       'Remarks': None,
+                       'Min Count': 1,
+                       'Max Count': 1,
+                       'Max Length': None
+                      })
 
         for k, v in properties.items():
 
             if "type" in v and (v["type"] == "object" or "object" in v["type"]):
-                prop = "{}___{}".format(parent_node, convert(k)) if parent_node else "{}".format(convert(k))
+                prop = "{}__{}".format(parent_node, convert(k)) if parent_node else "{}".format(convert(k))
                 process(df, name, v, parent_node=prop, prefix=prefix)
 
             elif "type" in v and (v["type"] == "array" or "array" in v["type"]):
-                child_name = "{}___{}".format(name, k)
+                child_name = "{}__{}".format(name, k)
                 process(df, child_name, v["items"], ref_node=name, prefix=prefix)
 
             else:
-                prop = "alias:{}___{}".format(parent_node, convert(k)) if parent_node else "alias:{}".format(convert(k))
+                prop = "alias:{}__{}".format(parent_node, convert(k)) if parent_node else "alias:{}".format(convert(k))
                 row = {'Shape Id': name_uri, 'Property Id': prop, 'Remarks': get_json_path(v["$id"])}
 
                 # determine 'Value Type'
@@ -170,6 +197,9 @@ def run(args):
     columns = ['Shape Id', 'Property Id', 'Remarks', 'Value Type', 'Stereotype', 'Min Count', 'Max Count', 'Max Length']
     _df = pandas.DataFrame().from_dict(df)
     _df.to_excel(writer, 'Property Constraints', columns=columns, index=False)
+
+    settings_columns, settings_df = settings_sheet()
+    settings_df.to_excel(writer, 'Settings', columns=settings_columns, index=False)
 
     writer.save()
 
