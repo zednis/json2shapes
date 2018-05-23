@@ -93,12 +93,12 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
         if not parent_node:
             df.append({'Shape Id': name_uri,
                        'Property Id': 'alias:STAGE_ID',
-                       'Value Type': 'xsd:string',
+                       'Value Type': 'xsd:integer',
                        'Stereotype': 'konig:syntheticKey',
                        'Remarks': None,
                        'Min Count': 1,
                        'Max Count': 1,
-                       'Max Length': 150
+                       'Max Length': None
                        })
 
         if ref_node:
@@ -129,8 +129,13 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
         for k, v in properties.items():
 
             if "type" in v and (v["type"] == "object" or "object" in v["type"]):
-                prop = "{}__{}".format(parent_node, convert(k)) if parent_node else "{}".format(convert(k))
-                process(df, name, v, parent_node=prop, prefix=prefix)
+
+                if len(v["properties"]) <= 10:
+                    prop = "{}__{}".format(parent_node, convert(k)) if parent_node else "{}".format(convert(k))
+                    process(df, name, v, parent_node=prop, prefix=prefix)
+                else:
+                    child_name = "{}__{}".format(name, k)
+                    process(df, child_name, v, ref_node=name, prefix=prefix)
 
             elif "type" in v and (v["type"] == "array" or "array" in v["type"]):
                 child_name = "{}__{}".format(name, k)
@@ -140,12 +145,16 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
                 prop = "alias:{}__{}".format(parent_node, convert(k)) if parent_node else "alias:{}".format(convert(k))
                 row = {'Shape Id': name_uri, 'Property Id': prop, 'Remarks': get_json_path(v["$id"])}
 
+                # print("{}".format(get_json_path(v["$id"])))
+
                 # determine 'Value Type'
                 if "type" in v and (v["type"] == "string" or "string" in v["type"]):
 
                     # TODO we should add a format for integer vs decimal
+                    # TODO and for decimal we should add scale and precision
                     if "format" in v and (v["format"] == "number" or "number" in v["format"]):
                         row.update({'Value Type': "xsd:decimal"})
+
                     elif "format" in v and (v["format"] == "date-time" or "date-time" in v["format"]):
                         row.update({'Value Type': "xsd:dateTime"})
                     else:
@@ -155,8 +164,10 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
 
                 if "maxLength" in v and v["maxLength"] and v["maxLength"] != "N/A":
                     row.update({'Max Length': int(v["maxLength"])})
-                elif "type" in v and (v["type"] == "string" or "string" in v["type"]):
-                    row.update({'Max Length': 150})
+                elif "type" in v and (v["type"] == "string" or "string" in v["type"]) \
+                        and not ("format" in v and "number" in v["format"]) \
+                        and not ("format" in v and "date-time" in v["format"]):
+                    row.update({'Max Length': 1000})
 
                 if "type" in v and "null" in v["type"]:
                     row.update({'Min Count': 0})

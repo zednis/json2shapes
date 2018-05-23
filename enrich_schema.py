@@ -3,6 +3,13 @@ import json
 import argparse
 
 
+def get_json_path(id_str):
+    json_path = id_str.replace("/items/properties/", "[*].")
+    json_path = json_path.replace("/properties/", ".")
+    json_path = "$"+json_path
+    return json_path
+
+
 def load_attr_mappings(mappingsfile):
     attr_mappings = []
     with open(mappingsfile, 'r') as attr_mapping_csv:
@@ -38,6 +45,9 @@ def process_properties(properties, attr_mappings):
 
     for k, v in properties.items():
         if "type" in v and "object" not in v["type"] and "array" not in v["type"]:
+
+            # TODO find 'JSON Classification Path' that matches computed JSON Path
+            # attr_mapping = next((x for x in attr_mappings if x['JSON Classification Path'] == k), None)
 
             # print("looking for attribute mapping for", k)
             attr_mapping = next((x for x in attr_mappings if x['Semantic Json Name'] == k), None)
