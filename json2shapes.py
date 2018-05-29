@@ -7,6 +7,7 @@ import pandas
 
 config = configparser.ConfigParser()
 config.optionxform = str
+UNSIGNED_INT_MAX = 4294967295
 
 
 def apply_aliases(name):
@@ -62,6 +63,99 @@ def ontology_sheet():
     return columns, df
 
 
+def determine_datatype(property):
+
+    if "type" in property:
+
+        if property["type"] == "integer" or "integer" in property["type"]:
+            return "xsd:integer"
+
+        elif property["type"] == "number" or "number" in property["type"]:
+            return "xsd:decimal"
+
+        elif property["type"] == "string" or "string" in property["type"]:
+            if "format" in property:
+                if property["format"] == "number" or "number" in property["format"]:
+                    return "xsd:decimal"
+
+                elif property["format"] == "integer" or "integer" in property["format"]:
+                    return "xsd:integer"
+
+                elif property["format"] == "date-time" or "date-time" in property["format"]:
+                    return "xsd:dateTime"
+                else:
+                    return "xsd:string"
+            else:
+                return "xsd:string"
+
+    else:
+        return "xsd:string"
+
+    if "type" in property and (property["type"] == "string" or "string" in property["type"]):
+
+        if "format" in property:
+
+            if property["format"] == "number" or "number" in property["format"]:
+                return "xsd:decimal"
+
+            elif property["format"] == "integer" or "integer" in property["format"]:
+                return "xsd:integer"
+
+            elif property["format"] == "date-time" or "date-time" in property["format"]:
+                return "xsd:dateTime"
+            else:
+                return "xsd:string"
+
+        else:
+            return "xsd:string"
+    else:
+        return "xsd:string"
+
+
+def determine_min_count(property):
+    if "type" in property and "null" in property["type"]:
+        return 0
+    else:
+        return 1
+
+
+def determine_min_inclusive(property):
+
+    datatype = determine_datatype(property)
+
+    if datatype == "xsd:integer":
+        if "minimum" in property:
+            return property["minimum"]
+        else:
+            return 0
+    else:
+        return None
+
+
+def determine_max_exclusive(property):
+
+    datatype = determine_datatype(property)
+
+    if datatype == "xsd:integer":
+        if "maximum" in property:
+            return property["maximum"]
+        else:
+            return UNSIGNED_INT_MAX
+    else:
+        return None
+
+
+def determine_max_length(property, default=1000):
+    datatype = determine_datatype(property)
+    if datatype == "xsd:string":
+        if "maxLength" in property and property["maxLength"] != "N/A":
+            return int(property["maxLength"])
+        else:
+            return default
+    else:
+        return None
+
+
 def shapes_sheet(data):
     columns = ['Shape Id', 'Comment', 'Scope Class', 'Datasource', 'Shape Type', 'One Of', 'IRI Template']
 
@@ -79,7 +173,37 @@ def shapes_sheet(data):
     return columns, df
 
 
-def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, prefix=None):
+def embed_object(property):
+    if len(property["properties"]) > 10:
+        return False
+    else:
+        return True
+
+
+def add_synthetic_keys(node):
+
+    if "properties" in node:
+        properties = node["properties"]
+        found_id = False
+        for k, v in properties.items():
+            if k == "id":
+                found_id = True
+
+            if "type" in v and (v["type"] == "object" or "object" in v["type"]):
+                if not embed_object(v):
+                    add_synthetic_keys(v)
+
+        if not found_id:
+            properties.update({"stageId": {
+                "$id": node["$id"]+"/properties/stageId",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": UNSIGNED_INT_MAX,
+                "exclusiveMaximum": True}
+            })
+
+
+def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, parent_id=None, prefix=None):
 
     if "properties" in node:
 
@@ -89,36 +213,29 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
         name2 = name if len(name_components) <= 2 else "__".join(name_components[-2:])
         name_uri = "shape:{}_{}".format(convert(prefix), convert(name2)) if prefix else "shape:{}".format(convert(name2))
 
-        # synthetic key
-        if not parent_node:
-            df.append({'Shape Id': name_uri,
-                       'Property Id': 'alias:STAGE_ID',
-                       'Value Type': 'xsd:integer',
-                       'Stereotype': 'konig:syntheticKey',
-                       'Remarks': None,
-                       'Min Count': 1,
-                       'Max Count': 1,
-                       'Max Length': None
-                       })
+        if ref_node and parent_id:
 
-        if ref_node:
-
-            # fk_uri = "alias:{}_FK".format(convert(ref_node)) if "__" not in ref_node else "alias:{}_FK".format(convert(ref_node[ref_node.rfind("__")+2:]))
             fk_uri = "alias:{}_FK".format(convert(ref_node))
 
             # add foreign key and array index (for preserving order)
+
             df.append({'Shape Id': name_uri,
                        'Property Id': fk_uri,
-                       'Value Type': 'xsd:string',
+                       'Value Type': parent_id["datatype"],
+                       'Min Inclusive': parent_id["minInclusive"],
+                       "Max Exclusive": parent_id["maxExclusive"],
                        'Stereotype': 'konig:foreignKey',
-                       'Remarks': 'references {}_{}.STAGE_ID'.format(prefix, convert(ref_node)),
+                       'Remarks': 'references {}_{}.{}'.format(prefix, convert(ref_node), parent_id["Field"]),
                        'Min Count': 1,
                        'Max Count': 1,
-                       'Max Length': 150
+                       'Max Length': parent_id["maxLength"]
                        })
+
             df.append({'Shape Id': name_uri,
                        'Property Id': "alias:STAGE_INDEX",
                        'Value Type': 'xsd:integer',
+                       'Min Inclusive': 0,
+                       'Max Exclusive': 4294967295,
                        'Stereotype': None,
                        'Remarks': None,
                        'Min Count': 1,
@@ -126,7 +243,18 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
                        'Max Length': None
                       })
 
+        primary_key_prop = { }
+
         for k, v in properties.items():
+
+            # NOTE - this only works if the id comes before any nested objects
+            # TODO replace with an implementation of JSON PATH queries
+            if k == "id" or k == "stageId":
+                primary_key_prop["Field"] = convert(k)
+                primary_key_prop["datatype"] = determine_datatype(v)
+                primary_key_prop["minInclusive"] = determine_min_inclusive(v)
+                primary_key_prop["maxExclusive"] = determine_max_exclusive(v)
+                primary_key_prop["maxLength"] = determine_max_length(v)
 
             if "type" in v and (v["type"] == "object" or "object" in v["type"]):
 
@@ -135,7 +263,7 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
                     process(df, name, v, parent_node=prop, prefix=prefix)
                 else:
                     child_name = "{}__{}".format(name, k)
-                    process(df, child_name, v, ref_node=name, prefix=prefix)
+                    process(df, child_name, v, ref_node=name, parent_id=primary_key_prop, prefix=prefix)
 
             elif "type" in v and (v["type"] == "array" or "array" in v["type"]):
                 child_name = "{}__{}".format(name, k)
@@ -143,41 +271,26 @@ def process(df, name, node, primary_key=None, ref_node=None, parent_node=None, p
 
             else:
                 prop = "alias:{}__{}".format(parent_node, convert(k)) if parent_node else "alias:{}".format(convert(k))
-                row = {'Shape Id': name_uri, 'Property Id': prop, 'Remarks': get_json_path(v["$id"])}
+                row = {'Shape Id': name_uri, 'Property Id': prop}
 
-                # print("{}".format(get_json_path(v["$id"])))
+                if k != "stageId":
+                    row.update({'Remarks': get_json_path(v["$id"])})
 
-                # determine 'Value Type'
-                if "type" in v and (v["type"] == "string" or "string" in v["type"]):
-
-                    # TODO we should add a format for integer vs decimal
-                    # TODO and for decimal we should add scale and precision
-                    if "format" in v and (v["format"] == "number" or "number" in v["format"]):
-                        row.update({'Value Type': "xsd:decimal"})
-
-                    elif "format" in v and (v["format"] == "date-time" or "date-time" in v["format"]):
-                        row.update({'Value Type': "xsd:dateTime"})
-                    else:
-                        row.update({'Value Type': 'xsd:string'})
-                else:
-                    row.update({'Value Type': 'xsd:string'})
-
-                if "maxLength" in v and v["maxLength"] and v["maxLength"] != "N/A":
-                    row.update({'Max Length': int(v["maxLength"])})
-                elif "type" in v and (v["type"] == "string" or "string" in v["type"]) \
-                        and not ("format" in v and "number" in v["format"]) \
-                        and not ("format" in v and "date-time" in v["format"]):
-                    row.update({'Max Length': 1000})
-
-                if "type" in v and "null" in v["type"]:
-                    row.update({'Min Count': 0})
-                else:
-                    row.update({'Min Count': 1})
-
+                row.update({'Value Type': determine_datatype(v)})
+                row.update({'Max Length': determine_max_length(v)})
+                row.update({'Min Count': determine_min_count(v)})
                 row.update({'Max Count': 1})
+
+                if k == "stageId":
+                    row.update({'Stereotype': "konig:syntheticKey", "Min Count": 1})
 
                 if k == primary_key:
                     row.update({'Stereotype': 'konig:primaryKey', 'Min Count': 1})
+                elif k == "id":
+                    row.update({'Stereotype': "konig:primaryKey", "Min Count": 1})
+
+                if "description" in v:
+                    row.update({'Comment': v['description']})
 
                 df.append(row)
 
@@ -195,6 +308,7 @@ def run(args):
 
     with open(args.schema) as json_schema:
         schema = json.load(json_schema)
+        add_synthetic_keys(schema)
         process(df, base, schema, primary_key=primary_key, prefix=prefix)
 
     writer = pandas.ExcelWriter(args.workbook)
@@ -205,7 +319,7 @@ def run(args):
     shapes_columns, shapes_df = shapes_sheet(df)
     shapes_df.to_excel(writer, 'Shapes', columns=shapes_columns, index=False)
 
-    columns = ['Shape Id', 'Property Id', 'Remarks', 'Value Type', 'Stereotype', 'Min Count', 'Max Count', 'Max Length']
+    columns = ['Shape Id', 'Property Id', 'Comment', 'Remarks', 'Value Type', 'Stereotype', 'Min Count', 'Max Count', 'Max Length', 'Min Inclusive', 'Max Exclusive', 'Decimal Precision', 'Decimal Scale']
     _df = pandas.DataFrame().from_dict(df)
     _df.to_excel(writer, 'Property Constraints', columns=columns, index=False)
 
